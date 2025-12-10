@@ -1,0 +1,130 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <ctype.h>
+#include <string.h>
+
+#define COLOR_FUNC "\033[93m"
+#define COLOR_RESET "\033[0m"
+
+typedef enum { NORMAL, STRING, CHARL, SL_COMMENT, ML_COMMENT } State;
+
+const char *keywords[] = {
+    "if","for","while","switch","do","sizeof","return","else",
+    "case","default","goto","break","continue", NULL
+};
+
+int is_keyword(const char *id){
+    for (int i=0; keywords[i]; ++i)
+        if (strcmp(id, keywords[i]) == 0) return 1;
+    return 0;
+}
+
+int lab1(char* filename){
+    /*if (argc < 2) { 
+        fprintf(stderr,"Usage: %s file.c\n",argv[0]); 
+        return 1;
+    }*/
+    FILE *f = fopen(filename, "r");
+    if (!f) { 
+        perror("fopen"); 
+        return 2; 
+    }
+
+    State state = NORMAL;
+    int c;
+
+    while ((c = fgetc(f)) != EOF) {
+        switch (state) {
+            case NORMAL:
+                if (c == '"') { 
+                    putchar(c); 
+                    state = STRING; 
+                }
+                else if (c == '\'') { 
+                    putchar(c); 
+                    state = CHARL; 
+                }
+                else if (c == '/' ) {
+                    int d = fgetc(f);
+                    if (d == '/') { 
+                        putchar(c); putchar(d); 
+                        state = SL_COMMENT; 
+                    }
+                    else if (d == '*') { 
+                        putchar(c); putchar(d); 
+                        state = ML_COMMENT;
+                    }
+                    else { 
+                    putchar(c); ungetc(d,f); 
+                    }
+                }
+                else if (isalpha(c) || c == '_') {
+                    char id[256]; int i=0;
+                    id[i++] = c;
+                    while ((c = fgetc(f)) != EOF && (isalnum(c)||c=='_')) {
+                        if (i<255) id[i++] = c;
+                    }
+                    id[i] = '\0';
+                                        
+                    int maybe_call = 0;
+                    if (c == '(' && !is_keyword(id)) {
+                        int d;
+                        long pos = ftell(f);
+                        int depth = 1;
+                        maybe_call = 1;
+                        
+                        while (depth > 0 && (d = fgetc(f)) != EOF) {
+                            if (d == '(') depth++;
+                            else if (d == ')') depth--;
+                        }
+                        /* после ')' проверяем следующий символ */
+                        d = fgetc(f);
+                        if (d == '{') maybe_call = 0; 
+                        if (d != EOF) fseek(f,pos,SEEK_SET); 
+                    }
+
+                    if (maybe_call) printf(COLOR_FUNC "%s" COLOR_RESET, id);
+                    else printf("%s", id);
+
+                    if (c != EOF) ungetc(c,f);
+                }
+                else putchar(c);
+                break;
+
+            case STRING:
+                putchar(c);
+                if (c == '\\') { 
+                    if ((c = fgetc(f)) != EOF) putchar(c); 
+                }
+                else if (c == '"') state = NORMAL;
+                break;
+
+            case CHARL:
+                putchar(c);
+                if (c == '\\') { 
+                    if ((c = fgetc(f)) != EOF) putchar(c); 
+                }
+                else if (c == '\'') state = NORMAL;
+                break;
+
+            case SL_COMMENT:
+                putchar(c);
+                if (c == '\n') state = NORMAL;
+                break;
+
+            case ML_COMMENT:
+                putchar(c);
+                if (c == '*' ) {
+                    int d = fgetc(f);
+                    if (d == '/') { 
+                        putchar(d); state = NORMAL; 
+                    }
+                    else if (d != EOF) ungetc(d,f);
+                }
+                break;
+        }
+    }
+
+    fclose(f);
+    return 0;
+}
